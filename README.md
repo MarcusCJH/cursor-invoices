@@ -34,6 +34,20 @@ Open this folder in Claude Code and run:
 
 The skill is bundled in `.claude/skills/` and loads automatically.
 
+## Automatic monthly download
+
+Schedule the script to run automatically on the 1st of every month at 9am with a macOS notification on completion.
+
+```bash
+make cron-install    # set up the schedule
+make cron-status     # check if it's active
+make cron-uninstall  # remove it
+```
+
+Logs are written to `run.log` in the project folder.
+
+> **Note:** The machine must be on and logged in at 9am on the 1st. If it's asleep or off, the job will be skipped until next month.
+
 ## Reset login session
 
 ```bash
