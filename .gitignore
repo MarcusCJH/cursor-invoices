@@ -1,0 +1,6 @@
+*.pdf
+cursor_browser_profile/
+__pycache__/
+.venv/
+*.pyc
+.idea/
