@@ -6,10 +6,16 @@ Downloads all your Cursor.com subscription invoices as PDFs and optionally uploa
 
 - [`uv`](https://docs.astral.sh/uv/getting-started/installation/) — no other setup needed
 
-## First-time setup (once per machine)
+## Install
 
 ```bash
 make install
+```
+
+One-time setup: installs the `cursor-invoices` command, installs Playwright Chromium, and walks you through SharePoint configuration.
+
+```bash
+make uninstall   # remove tool, session tokens, and SharePoint config
 ```
 
 ## Usage
@@ -25,21 +31,38 @@ On first run a browser window opens — log in to Cursor. Subsequent runs are fu
 
 Automatically uploads receipts to a SharePoint folder by year and month (e.g. `Receipts/2026/07. July`).
 
-**Setup:**
+`make install` handles the setup — it copies `.sharepoint.env.example`, prompts for your SharePoint site URL, and saves it to `.sharepoint.env`. On the next `make run`, a browser opens for SharePoint login if no session exists — sign in with your work account and it saves automatically.
 
-1. `cp .sharepoint.env.example .sharepoint.env`
-2. Set `SHAREPOINT_SITE_URL` in `.sharepoint.env`
+To configure manually after the fact:
 
-That's it. On the next `make run`, a browser will open for SharePoint login if no session exists — sign in with your work account and it saves automatically.
+1. Edit `SHAREPOINT_SITE_URL` in `.sharepoint.env`
+2. `make sharepoint-login` to authenticate
 
 **Verify before a real run:**
 
 ```bash
-make test-upload   # uploads a dummy receipt to Receipts/2069/01. January
+make test-upload        # uploads a dummy receipt to Receipts/2069/01. January
+make sharepoint-logout  # reset the SharePoint session
 ```
 
+## Without Make
+
 ```bash
-make sharepoint-logout   # reset the SharePoint session
+# Install (once)
+uv tool install .
+uv run --with playwright python -m playwright install chromium
+cp .sharepoint.env.example .sharepoint.env
+# edit .sharepoint.env and set SHAREPOINT_SITE_URL
+
+# Run
+cursor-invoices
+
+# Reset sessions
+cursor-invoices --logout
+cursor-invoices --sharepoint-logout
+
+# Help
+cursor-invoices --help
 ```
 
 ## Automatic monthly download
@@ -57,7 +80,8 @@ Logs are written to `run.log`. The machine must be on and logged in at the sched
 
 | Problem | Fix |
 |---|---|
-| `Executable doesn't exist` | `make install` |
+| `cursor-invoices: command not found` | `make install` |
+| `Executable doesn't exist` (Playwright) | `make install` |
 | No invoices found | Navigate to Settings → Billing manually, then press Enter |
 | PDF download 403 | Re-run — invoice URLs expire |
 | SharePoint upload fails | `make sharepoint-logout` then re-run |

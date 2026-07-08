@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=83"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cursor-invoices"
+version = "0.1.0"
+description = "Download Cursor.com subscription invoices as PDFs"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["playwright"]  # also declared in cursor_invoices.py PEP 723 header for uv run
+
+[project.scripts]
+cursor-invoices = "cursor_invoices:cli"
+
+[tool.setuptools]
+py-modules = ["cursor_invoices"]

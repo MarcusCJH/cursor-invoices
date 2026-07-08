@@ -10,10 +10,10 @@ Download all Cursor.com invoices as receipts (PDFs), then optionally upload
 to SharePoint if .sharepoint.env is configured.
 
 Usage:
-    uv run download_cursor_invoices.py [output_dir]
+    cursor-invoices [output_dir]
+    uv run cursor_invoices.py [output_dir]
 
 Flags:
-    --install-browser    Install Playwright Chromium (once per machine)
     --logout             Reset Cursor session
     --sharepoint-login   Authenticate with SharePoint (opens browser once)
     --sharepoint-logout  Reset SharePoint session
@@ -33,48 +33,46 @@ from urllib.parse import quote, urlparse
 
 from playwright.async_api import async_playwright
 
-PROFILE_DIR    = Path(__file__).parent / "cursor_browser_profile"
-SP_PROFILE_DIR = Path(__file__).parent / "sharepoint_browser_profile"
+DATA_DIR       = Path.home() / ".local" / "share" / "cursor-invoices"
+PROFILE_DIR    = DATA_DIR / "cursor_browser_profile"
+SP_PROFILE_DIR = DATA_DIR / "sharepoint_browser_profile"
 BILLING_URL    = "https://cursor.com/settings"
-SHAREPOINT_ENV = Path(__file__).parent / ".sharepoint.env"
 USERNAME       = re.sub(r"[^\w.-]", "_", getpass.getuser())
 CURSOR_PROMPT  = "Opening browser — log in with Google, then wait for the page to load."
+_DUMMY_PDF = (
+    b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+    b"3 0 obj<</Type/Page/MediaBox[0 0 200 50]/Parent 2 0 R>>endobj\n"
+    b"xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n"
+    b"0000000058 00000 n \n0000000115 00000 n \n"
+    b"trailer<</Size 4/Root 1 0 R>>\nstartxref\n173\n%%EOF\n"
+)
+
 
 def _cursor_landed(url: str) -> bool:
     return "cursor.com/settings" in url or "cursor.com/dashboard" in url
 
-# ── arg parsing ───────────────────────────────────────────────────────────────
 
-args       = {a for a in sys.argv[1:] if a.startswith("--")}
-output_args = [a for a in sys.argv[1:] if not a.startswith("--")]
-OUTPUT_DIR = Path(output_args[0]) if output_args else Path(".")
-
-if "--install-browser" in args:
-    subprocess.run(
-        ["uv", "run", "--with", "playwright", "python", "-m", "playwright", "install", "chromium"],
-        check=True,
-    )
-    sys.exit(0)
-
-
-def _clear_session(profile: Path, name: str) -> None:
-    if profile.exists():
-        shutil.rmtree(profile)
-        print(f"{name} session cleared.")
-    else:
-        print(f"No saved {name} session found.")
-
-
-if "--logout" in args:
-    _clear_session(PROFILE_DIR, "Cursor")
-    sys.exit(0)
-
-if "--sharepoint-logout" in args:
-    _clear_session(SP_PROFILE_DIR, "SharePoint")
-    sys.exit(0)
+def _find_sharepoint_env() -> Path:
+    cwd = Path(".sharepoint.env")
+    if cwd.exists():
+        return cwd
+    return Path.home() / ".config" / "cursor-invoices" / ".sharepoint.env"
 
 
 # ── browser ───────────────────────────────────────────────────────────────────
+
+def _ensure_browser() -> None:
+    """Install Playwright Chromium if it isn't present yet."""
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            p.chromium.executable_path  # raises if not installed
+    except Exception as e:
+        if "Executable doesn't exist" in str(e) or "playwright install" in str(e).lower():
+            print("Playwright Chromium not found — installing now (one-time setup)…")
+            subprocess.run([sys.executable, "-m", "playwright", "install", "chromium"], check=True)
+
 
 async def _open_context(pw, profile: Path, headless: bool):
     kwargs = dict(headless=headless, args=["--disable-blink-features=AutomationControlled"])
@@ -122,10 +120,11 @@ async def _open_authed_page(pw, profile: Path, url: str, landed, re_login):
 # ── config ────────────────────────────────────────────────────────────────────
 
 def _load_sp_config() -> dict | None:
-    if not SHAREPOINT_ENV.exists():
+    sharepoint_env = _find_sharepoint_env()
+    if not sharepoint_env.exists():
         return None
     config: dict[str, str] = {}
-    for line in SHAREPOINT_ENV.read_text().splitlines():
+    for line in sharepoint_env.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#") and "=" in line:
             k, _, v = line.partition("=")
@@ -204,14 +203,13 @@ async def find_invoice_urls(page) -> list[str]:
             href for a in await page.locator("a[href*='invoice.stripe.com']").all()
             if (href := await a.get_attribute("href"))
         ]
-        # Fallback: scrape raw HTML for URLs not in anchor tags
         if not found:
             found = re.findall(r'https://invoice\.stripe\.com/i/[^\s"\'<>]+', await page.content())
         urls += found
     return list(dict.fromkeys(urls))
 
 
-async def download_receipt(page, invoice_url: str, idx: int) -> Path | None:
+async def download_receipt(page, invoice_url: str, idx: int, output_dir: Path, now: datetime) -> Path | None:
     await page.goto(invoice_url)
     await page.wait_for_load_state("load", timeout=15_000)
     try:
@@ -231,7 +229,7 @@ async def download_receipt(page, invoice_url: str, idx: int) -> Path | None:
             await receipt_btn.first.click()
         download = await dl.value
         suffix = Path(download.suggested_filename).suffix or ".pdf"
-        dest = OUTPUT_DIR / f"{USERNAME}_receipt_{datetime.today().strftime('%Y%m%d')}_{idx:02d}{suffix}"
+        dest = output_dir / f"{USERNAME}_receipt_{now.strftime('%Y%m%d')}_{idx:02d}{suffix}"
         await download.save_as(str(dest))
         print(f"  Saved: {dest.name}")
         return dest
@@ -242,9 +240,10 @@ async def download_receipt(page, invoice_url: str, idx: int) -> Path | None:
 
 # ── main ──────────────────────────────────────────────────────────────────────
 
-async def main():
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+async def main(args: set[str], output_dir: Path):
+    output_dir.mkdir(parents=True, exist_ok=True)
     sp_config = _load_sp_config()
+    now = datetime.today()
 
     async with async_playwright() as pw:
 
@@ -259,19 +258,11 @@ async def main():
             if not sp_config:
                 print("No .sharepoint.env found — copy .sharepoint.env.example first.")
                 return
-            dummy_pdf = (
-                b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
-                b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
-                b"3 0 obj<</Type/Page/MediaBox[0 0 200 50]/Parent 2 0 R>>endobj\n"
-                b"xref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n"
-                b"0000000058 00000 n \n0000000115 00000 n \n"
-                b"trailer<</Size 4/Root 1 0 R>>\nstartxref\n173\n%%EOF\n"
-            )
             receipts   = sp_config.get("SHAREPOINT_RECEIPTS_FOLDER", "Receipts")
             folder_rel = f"{receipts}/2069/01. January"
-            filename   = f"{USERNAME}_receipt_{datetime.today().strftime('%Y%m%d')}_01.pdf"
+            filename   = f"{USERNAME}_receipt_{now.strftime('%Y%m%d')}_01.pdf"
             print(f"Test upload → Shared Documents/{folder_rel}/{filename}")
-            await sp_upload(pw, sp_config, [(filename, dummy_pdf)], folder_rel)
+            await sp_upload(pw, sp_config, [(filename, _DUMMY_PDF)], folder_rel)
             return
 
         context, page = await _open_authed_page(
@@ -286,13 +277,12 @@ async def main():
             await context.close()
             return
 
-        print(f"Found {len(invoice_urls)} invoice(s). Downloading to: {OUTPUT_DIR.resolve()}\n")
+        print(f"Found {len(invoice_urls)} invoice(s). Downloading to: {output_dir.resolve()}\n")
         downloaded = [p for idx, url in enumerate(invoice_urls, 1)
-                      if (p := await download_receipt(page, url, idx))]
+                      if (p := await download_receipt(page, url, idx, output_dir, now))]
         await context.close()
 
         if downloaded and "--no-upload" not in args and sp_config:
-            now        = datetime.today()
             receipts   = sp_config.get("SHAREPOINT_RECEIPTS_FOLDER", "Receipts")
             folder_rel = f"{receipts}/{now.year}/{now.month:02d}. {now.strftime('%B')}"
             try:
@@ -303,5 +293,45 @@ async def main():
     print("\nDone.")
 
 
+def cli():
+    raw_args    = sys.argv[1:]
+    args        = {a for a in raw_args if a.startswith("--")}
+    output_args = [a for a in raw_args if not a.startswith("--")]
+    output_dir  = Path(output_args[0]) if output_args else Path(".")
+
+    if "--help" in args or "-h" in args:
+        print("""Usage: cursor-invoices [output_dir] [--flags]
+
+  cursor-invoices                  Download invoices to current directory
+  cursor-invoices ~/receipts       Download to a specific directory
+
+Flags:
+  --no-upload          Skip SharePoint upload for this run
+  --sharepoint-login   Authenticate with SharePoint (opens browser once)
+  --sharepoint-logout  Reset SharePoint session
+  --logout             Reset Cursor session
+  --help               Show this message""")
+        sys.exit(0)
+
+    if "--logout" in args:
+        _clear_session(PROFILE_DIR, "Cursor")
+        sys.exit(0)
+
+    if "--sharepoint-logout" in args:
+        _clear_session(SP_PROFILE_DIR, "SharePoint")
+        sys.exit(0)
+
+    _ensure_browser()
+    asyncio.run(main(args, output_dir))
+
+
+def _clear_session(profile: Path, name: str) -> None:
+    if profile.exists():
+        shutil.rmtree(profile)
+        print(f"{name} session cleared.")
+    else:
+        print(f"No saved {name} session found.")
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    cli()
