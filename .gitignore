@@ -1,5 +1,7 @@
 *.pdf
 cursor_browser_profile/
+sharepoint_browser_profile/
+.sharepoint.env
 __pycache__/
 .venv/
 *.pyc

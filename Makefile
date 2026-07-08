@@ -2,17 +2,20 @@ SCRIPT_DIR := $(shell pwd)
 UV         := $(shell which uv)
 DAY        ?= 1
 
-.PHONY: install run logout cron-install cron-uninstall cron-status help
+.PHONY: install run logout sharepoint-login sharepoint-logout test-upload cron-install cron-uninstall cron-status help
 
 help:
 	@echo "Usage:"
-	@echo "  make install             Install Playwright browser (once per machine)"
-	@echo "  make run                 Download invoices and save receipts"
-	@echo "  make logout              Reset Cursor login session"
-	@echo "  make cron-install        Schedule on the 1st of each month (default)"
-	@echo "  make cron-install DAY=23 Schedule on a specific day of the month"
-	@echo "  make cron-uninstall      Remove the scheduled job"
-	@echo "  make cron-status         Check if the scheduled job is active"
+	@echo "  make install              Install Playwright browser (once per machine)"
+	@echo "  make run                  Download invoices and save receipts"
+	@echo "  make logout               Reset Cursor login session"
+	@echo "  make sharepoint-login     Authenticate with SharePoint (one-time, opens browser)"
+	@echo "  make sharepoint-logout    Reset SharePoint session"
+	@echo "  make test-upload          Upload a dummy receipt to Receipts/2069/01. January"
+	@echo "  make cron-install         Schedule on the 1st of each month (default)"
+	@echo "  make cron-install DAY=23  Schedule on a specific day of the month"
+	@echo "  make cron-uninstall       Remove the scheduled job"
+	@echo "  make cron-status          Check if the scheduled job is active"
 
 install:
 	uv run download_cursor_invoices.py --install-browser
@@ -22,6 +25,15 @@ run:
 
 logout:
 	uv run download_cursor_invoices.py --logout
+
+sharepoint-login:
+	uv run download_cursor_invoices.py --sharepoint-login
+
+sharepoint-logout:
+	uv run download_cursor_invoices.py --sharepoint-logout
+
+test-upload:
+	uv run download_cursor_invoices.py --test-upload
 
 cron-install:
 	@NOTIFY_OK="osascript -e 'display notification \"Receipts saved successfully\" with title \"Cursor Invoices\"'"; \
