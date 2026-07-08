@@ -9,7 +9,7 @@ help:
 	@echo "  make install              Install Playwright browser (once per machine)"
 	@echo "  make run                  Download invoices and save receipts"
 	@echo "  make logout               Reset Cursor login session"
-	@echo "  make sharepoint-login     Authenticate with SharePoint (one-time, opens browser)"
+	@echo "  make sharepoint-login     Manually authenticate with SharePoint (auto on first run)"
 	@echo "  make sharepoint-logout    Reset SharePoint session"
 	@echo "  make test-upload          Upload a dummy receipt to Receipts/2069/01. January"
 	@echo "  make cron-install         Schedule on the 1st of each month (default)"

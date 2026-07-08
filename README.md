@@ -9,51 +9,34 @@ Downloads all your Cursor.com subscription invoices as PDFs and optionally uploa
 ## First-time setup (once per machine)
 
 ```bash
-uv run download_cursor_invoices.py --install-browser
+make install
 ```
 
 ## Usage
 
 ```bash
-# Download PDFs to current directory (and upload to SharePoint if configured)
-uv run download_cursor_invoices.py
-
-# Save to a specific directory
-uv run download_cursor_invoices.py ~/Documents/cursor-invoices
-
-# Skip SharePoint upload for this run
-uv run download_cursor_invoices.py --no-upload
+make run        # download invoices (+ upload to SharePoint if configured)
+make logout     # reset Cursor session
 ```
 
-A browser window opens — log in to Cursor normally. The script finds all your invoices and downloads them as PDFs.
-
-## Claude Code / Cursor users
-
-Open this folder and run:
-
-```
-/download-cursor-invoices
-```
-
-The skill is bundled in `.claude/skills/` and `.cursor/skills/` and loads automatically.
+On first run a browser window opens — log in to Cursor. Subsequent runs are fully headless.
 
 ## SharePoint upload (optional)
 
-Automatically upload downloaded receipts to a SharePoint folder organised by year and month (e.g. `Receipts/2026/07. July`).
+Automatically uploads receipts to a SharePoint folder by year and month (e.g. `Receipts/2026/07. July`).
 
-**One-time setup:**
+**Setup:**
 
-1. Copy the config template: `cp .sharepoint.env.example .sharepoint.env`
-2. Edit `.sharepoint.env` and set your SharePoint site URL
-3. Authenticate: `make sharepoint-login` — opens a browser, sign in with your work account
+1. `cp .sharepoint.env.example .sharepoint.env`
+2. Set `SHAREPOINT_SITE_URL` in `.sharepoint.env`
 
-**Verify it works:**
+That's it. On the next `make run`, a browser will open for SharePoint login if no session exists — sign in with your work account and it saves automatically.
+
+**Verify before a real run:**
 
 ```bash
 make test-upload   # uploads a dummy receipt to Receipts/2069/01. January
 ```
-
-After that, `make run` downloads invoices and uploads them automatically.
 
 ```bash
 make sharepoint-logout   # reset the SharePoint session
@@ -61,30 +44,20 @@ make sharepoint-logout   # reset the SharePoint session
 
 ## Automatic monthly download
 
-Schedule the script to run on the 1st of every month at 9am with a macOS notification on completion.
-
 ```bash
-make cron-install    # set up the schedule
-make cron-status     # check if it's active
-make cron-uninstall  # remove it
+make cron-install         # schedule for 1st of each month at 9am
+make cron-install DAY=23  # or a specific day
+make cron-status
+make cron-uninstall
 ```
 
-Logs are written to `run.log` in the project folder.
-
-> **Note:** The machine must be on and logged in at 9am on the 1st. If it's asleep or off, the job will be skipped until next month.
-
-## Reset sessions
-
-```bash
-uv run download_cursor_invoices.py --logout             # reset Cursor session
-uv run download_cursor_invoices.py --sharepoint-logout  # reset SharePoint session
-```
+Logs are written to `run.log`. The machine must be on and logged in at the scheduled time.
 
 ## Troubleshooting
 
 | Problem | Fix |
 |---|---|
-| `Executable doesn't exist` | Run `--install-browser` |
+| `Executable doesn't exist` | `make install` |
 | No invoices found | Navigate to Settings → Billing manually, then press Enter |
 | PDF download 403 | Re-run — invoice URLs expire |
-| SharePoint upload fails | Run `make sharepoint-login` to refresh the session |
+| SharePoint upload fails | `make sharepoint-logout` then re-run |
