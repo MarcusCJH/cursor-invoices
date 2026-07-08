@@ -27,23 +27,17 @@ make logout     # reset Cursor session
 
 On first run a browser window opens — log in to Cursor. Subsequent runs are fully headless.
 
-## SharePoint upload (optional)
+## SharePoint upload
 
 Automatically uploads receipts to a SharePoint folder by year and month (e.g. `Receipts/2026/07. July`).
 
-`make install` handles the setup — it copies `.sharepoint.env.example`, prompts for your SharePoint site URL, and saves it to `.sharepoint.env`. On the next `make run`, a browser opens for SharePoint login if no session exists — sign in with your work account and it saves automatically.
+`make install` prompts for your SharePoint site URL and saves it to `.sharepoint.env`. On the next `make run`, a browser opens for SharePoint login if no session exists - sign in with your work account and it saves automatically.
 
 To configure manually after the fact:
 
 1. Edit `SHAREPOINT_SITE_URL` in `.sharepoint.env`
 2. `make sharepoint-login` to authenticate
 
-**Verify before a real run:**
-
-```bash
-make test-upload        # uploads a dummy receipt to Receipts/2069/01. January
-make sharepoint-logout  # reset the SharePoint session
-```
 
 ## Without Make
 
