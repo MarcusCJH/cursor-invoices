@@ -70,6 +70,13 @@ make cron-uninstall
 
 Logs are written to `run.log`. The machine must be on and logged in at the scheduled time.
 
+## Windows
+
+```
+Error 404: Operating system not found.
+Hint: Try macOS.
+```
+
 ## Troubleshooting
 
 | Problem | Fix |
