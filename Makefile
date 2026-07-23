@@ -46,6 +46,7 @@ uninstall:
 	@echo "cursor-invoices uninstalled and all session data removed."
 
 run:
+	uv sync --quiet
 	uv run cursor_invoices.py
 
 logout:
